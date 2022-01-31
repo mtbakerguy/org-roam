@@ -1,11 +1,11 @@
 ;;; org-roam-utils.el --- Utilities for Org-roam -*- lexical-binding: t; -*-
 
-;; Copyright © 2020-2021 Jethro Kuan <jethrokuan95@gmail.com>
+;; Copyright © 2020-2022 Jethro Kuan <jethrokuan95@gmail.com>
 
 ;; Author: Jethro Kuan <jethrokuan95@gmail.com>
 ;; URL: https://github.com/org-roam/org-roam
 ;; Keywords: org-mode, roam, convenience
-;; Version: 2.1.0
+;; Version: 2.2.0
 ;; Package-Requires: ((emacs "26.1") (dash "2.13") (org "9.4"))
 
 ;; This file is NOT part of GNU Emacs.
@@ -51,6 +51,16 @@
   (->> s
        (org-roam-replace-string "\\" "\\\\")
        (org-roam-replace-string "\"" "\\\"")))
+
+(defun org-roam-word-wrap (len s)
+  "If S is longer than LEN, wrap the words with newlines."
+  (declare (side-effect-free t))
+  (save-match-data
+    (with-temp-buffer
+      (insert s)
+      (let ((fill-column len))
+        (fill-region (point-min) (point-max)))
+      (buffer-substring (point-min) (point-max)))))
 
 (defun org-roam-string-equal (s1 s2)
   "Return t if S1 and S2 are equal.
@@ -99,6 +109,12 @@ SPEC is a list, as per `dolist'."
     `(dolist ,spec ,@body)))
 
 ;;; File utilities
+(defun org-roam-descendant-of-p (a b)
+  "Return t if A is descendant of B."
+  (unless (equal (file-truename a) (file-truename b))
+    (string-prefix-p (expand-file-name b)
+                     (expand-file-name a))))
+
 (defmacro org-roam-with-file (file keep-buf-p &rest body)
   "Execute BODY within FILE.
 If FILE is nil, execute BODY in the current buffer.
@@ -119,7 +135,8 @@ Kills the buffer if KEEP-BUF-P is nil, and FILE is not yet visited."
          (delay-mode-hooks
            (let ((org-inhibit-startup t)
                  (org-agenda-files nil))
-             (org-mode))))
+             (org-mode)
+             (hack-local-variables))))
        (setq res (progn ,@body))
        (unless (and new-buf (not ,keep-buf-p))
          (save-buffer)))

@@ -5,8 +5,8 @@
 ;; Author: Jethro Kuan <jethrokuan95@gmail.com>
 ;; URL: https://github.com/org-roam/org-roam
 ;; Keywords: org-mode, roam, convenience
-;; Version: 2.1.0
-;; Package-Requires: ((emacs "26.1") (dash "2.13") (f "0.17.2") (org "9.4") (emacsql "3.0.0") (emacsql-sqlite "1.0.0") (magit-section "3.0.0"))
+;; Version: 2.2.0
+;; Package-Requires: ((emacs "26.1") (dash "2.13") (org "9.4") (emacsql "3.0.0") (emacsql-sqlite "1.0.0") (magit-section "3.0.0"))
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -71,7 +71,6 @@
 ;; majority of them can be found at https://github.com/org-roam and MELPA.
 ;;
 ;;; Code:
-(require 'f)
 (require 'dash)
 
 (require 'rx)
@@ -195,7 +194,7 @@ FILE is an Org-roam file if:
        (member ext org-roam-file-extensions)
        (not (and org-roam-file-exclude-regexp
                  (string-match-p org-roam-file-exclude-regexp path)))
-       (f-descendant-of-p path (expand-file-name org-roam-directory))))))
+       (org-roam-descendant-of-p path (expand-file-name org-roam-directory))))))
 
 (defun org-roam-list-files ()
   "Return a list of all Org-roam files under `org-roam-directory'.
@@ -260,7 +259,8 @@ If no files are found, an empty list is returned."
        (shell-command-to-string it)
        (ansi-color-filter-apply it)
        (split-string it "\n")
-       (seq-filter #'s-present? it)))
+       (seq-filter (lambda (s)
+                     (or (null s) (string= "" s))) it)))
 
 (defun org-roam--list-files-search-globs (exts)
   "Given EXTS, return a list of search globs.
@@ -279,8 +279,8 @@ E.g. (\".org\") => (\"*.org\" \"*.org.gpg\")"
 (defun org-roam--list-files-fd (executable dir)
   "Return all Org-roam files under DIR, using \"fd\", provided as EXECUTABLE."
   (let* ((globs (org-roam--list-files-search-globs org-roam-file-extensions))
-         (extensions (string-join (mapcar (lambda (glob) (substring glob 2 -1)) globs) " -e "))
-         (command (string-join `(,executable "-L" ,dir "--type file" ,extensions) " ")))
+         (extensions (string-join (mapcar (lambda (glob) (concat "-e " (substring glob 2 -1))) globs) " "))
+         (command (string-join `(,executable "-L" "--type file" ,extensions "." ,dir) " ")))
     (org-roam--shell-command-files command)))
 
 (defalias 'org-roam--list-files-fdfind #'org-roam--list-files-fd)
@@ -313,6 +313,7 @@ E.g. (\".org\") => (\"*.org\" \"*.org.gpg\")"
   (require 'org-roam-utils)
   (require 'org-roam-db)
   (require 'org-roam-node)
+  (require 'org-roam-id)
   (require 'org-roam-capture)
   (require 'org-roam-mode)
   (require 'org-roam-migrate))

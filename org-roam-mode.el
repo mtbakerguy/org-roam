@@ -1,12 +1,12 @@
 ;;; org-roam-mode.el --- Major mode for special Org-roam buffers -*- lexical-binding: t -*-
 
-;; Copyright © 2020-2021 Jethro Kuan <jethrokuan95@gmail.com>
+;; Copyright © 2020-2022 Jethro Kuan <jethrokuan95@gmail.com>
 
 ;; Author: Jethro Kuan <jethrokuan95@gmail.com>
 ;; URL: https://github.com/org-roam/org-roam
 ;; Keywords: org-mode, roam, convenience
-;; Version: 2.1.0
-;; Package-Requires: ((emacs "26.1") (dash "2.13") (f "0.17.2") (org "9.4") (emacsql "3.0.0") (emacsql-sqlite "1.0.0") (magit-section "3.0.0"))
+;; Version: 2.2.0
+;; Package-Requires: ((emacs "26.1") (dash "2.13") (org "9.4") (emacsql "3.0.0") (emacsql-sqlite "1.0.0") (magit-section "3.0.0"))
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -643,7 +643,7 @@ References from FILE are excluded."
                     col (string-to-number (match-string 3 line))
                     match (match-string 4 line))
               (when (and match
-                         (not (f-equal-p (org-roam-node-file node) f))
+                         (not (file-equal-p (org-roam-node-file node) f))
                          (member (downcase match) (mapcar #'downcase titles)))
                 (magit-insert-section section (org-roam-grep-section)
                   (oset section file f)

@@ -5,7 +5,7 @@
 ;; Author: Jethro Kuan <jethrokuan95@gmail.com>
 ;; URL: https://github.com/org-roam/org-roam
 ;; Keywords: org-mode, roam, convenience
-;; Version: 2.1.0
+;; Version: 2.2.0
 ;; Package-Requires: ((emacs "26.1") (dash "2.13") (org "9.4") (magit-section "3.0.0"))
 
 ;; This file is NOT part of GNU Emacs.
@@ -36,8 +36,7 @@
 
 ;;; Options
 ;;;; Completing-read
-(defcustom org-roam-node-display-template
-  (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag))
+(defcustom org-roam-node-display-template "${title}"
   "Configures display formatting for Org-roam node.
 Patterns of form \"${field-name:length}\" are interpolated based
 on the current node.
@@ -175,6 +174,7 @@ It takes a single argument REF, which is a propertized string."
                            776 ; U+0308 COMBINING DIAERESIS
                            777 ; U+0309 COMBINING HOOK ABOVE
                            778 ; U+030A COMBINING RING ABOVE
+                           779 ; U+030B COMBINING DOUBLE ACUTE ACCENT
                            780 ; U+030C COMBINING CARON
                            795 ; U+031B COMBINING HORN
                            803 ; U+0323 COMBINING DOT BELOW
@@ -426,19 +426,41 @@ GROUP BY id")))
                               all-titles)))))
 
 ;;;; Finders
-(defun org-roam-node-find-noselect (node &optional force)
-  "Navigate to the point for NODE, and return the buffer.
-If NODE is already visited, this won't automatically move the
-point to the beginning of the NODE, unless FORCE is non-nil."
-  (unless (org-roam-node-file node)
-    (user-error "Node does not have corresponding file"))
-  (let ((buf (find-file-noselect (org-roam-node-file node))))
-    (with-current-buffer buf
-      (when (or force
-                (not (equal (org-roam-node-id node)
-                            (org-roam-id-at-point))))
-        (goto-char (org-roam-node-point node))))
-    buf))
+(defun org-roam-node-marker (node)
+  "Get the marker for NODE."
+  (unwind-protect
+      (let* ((file (org-roam-node-file node))
+             (buffer (or (find-buffer-visiting file)
+                         (find-file-noselect file))))
+        (with-current-buffer buffer
+          (move-marker (make-marker) (org-roam-node-point node) buffer)))))
+
+(defun org-roam-node-open (node &optional cmd force)
+  "Go to the node NODE.
+CMD is the command used to display the buffer. If not provided,
+`org-link-frame-setup' is respected. Assumes that the node is
+fully populated, with file and point. If NODE is already visited,
+this won't automatically move the point to the beginning of the
+NODE, unless FORCE is non-nil."
+  (interactive (list (org-roam-node-at-point) current-prefix-arg))
+  (org-mark-ring-push)
+  (let ((m (org-roam-node-marker node))
+        (cmd (or cmd
+                 (cdr
+                  (assq
+                   (cdr (assq 'file org-link-frame-setup))
+                   '((find-file . switch-to-buffer)
+                     (find-file-other-window . switch-to-buffer-other-window)
+                     (find-file-other-frame . switch-to-buffer-other-frame))))
+                 'switch-to-buffer-other-window)))
+    (if (not (equal (current-buffer) (marker-buffer m)))
+        (funcall cmd (marker-buffer m)))
+    (when (or force
+              (not (equal (org-roam-node-id node)
+                          (org-roam-id-at-point))))
+      (goto-char m))
+    (move-marker m nil))
+  (org-show-context))
 
 (defun org-roam-node-visit (node &optional other-window force)
   "From the current buffer, visit NODE. Return the visited buffer.
@@ -450,13 +472,10 @@ If NODE is already visited, this won't automatically move the
 point to the beginning of the NODE, unless FORCE is non-nil. In
 interactive calls FORCE always set to t."
   (interactive (list (org-roam-node-at-point t) current-prefix-arg t))
-  (let ((buf (org-roam-node-find-noselect node force))
-        (display-buffer-fn (if other-window
+  (org-roam-node-open node (if other-window
                                #'switch-to-buffer-other-window
-                             #'pop-to-buffer-same-window)))
-    (funcall display-buffer-fn buf)
-    (when (org-invisible-p) (org-show-context))
-    buf))
+                             #'pop-to-buffer-same-window)
+                      force))
 
 ;;;###autoload
 (cl-defun org-roam-node-find (&optional other-window initial-input filter-fn &key templates)
@@ -477,39 +496,31 @@ The TEMPLATES, if provided, override the list of capture templates (see
        :props '(:finalize find-file)))))
 
 ;;;###autoload
-(defun org-roam-node-random (&optional other-window)
+(defun org-roam-node-random (&optional other-window filter-fn)
   "Find and open a random Org-roam node.
 With prefix argument OTHER-WINDOW, visit the node in another
-window instead."
+window instead.
+FILTER-FN is a function to filter out nodes: it takes an `org-roam-node',
+and when nil is returned the node will be filtered out."
   (interactive current-prefix-arg)
-  (let ((random-row (seq-random-elt (org-roam-db-query [:select [id file pos] :from nodes]))))
-    (org-roam-node-visit (org-roam-node-create :id (nth 0 random-row)
-                                               :file (nth 1 random-row)
-                                               :point (nth 2 random-row))
-                         other-window)))
+  (org-roam-node-visit
+   (cdr (seq-random-elt (org-roam-node-read--completions filter-fn)))
+   other-window))
 
 ;;;; Completing-read interface
-(defun org-roam-node-read (&optional initial-input filter-fn sort-fn require-match)
+(defun org-roam-node-read (&optional initial-input filter-fn sort-fn require-match prompt)
   "Read and return an `org-roam-node'.
 INITIAL-INPUT is the initial minibuffer prompt value.
 FILTER-FN is a function to filter out nodes: it takes an `org-roam-node',
 and when nil is returned the node will be filtered out.
 SORT-FN is a function to sort nodes. See `org-roam-node-read-sort-by-file-mtime'
 for an example sort function.
-If REQUIRE-MATCH, the minibuffer prompt will require a match."
-  (let* ((nodes (org-roam-node-read--completions))
-         (nodes (if filter-fn
-                    (cl-remove-if-not
-                     (lambda (n) (funcall filter-fn (cdr n)))
-                     nodes)
-                  nodes))
-         (sort-fn (or sort-fn
-                      (when org-roam-node-default-sort
-                        (intern (concat "org-roam-node-read-sort-by-"
-                                        (symbol-name org-roam-node-default-sort))))))
-         (_ (when sort-fn (setq nodes (seq-sort sort-fn nodes))))
+If REQUIRE-MATCH, the minibuffer prompt will require a match.
+PROMPT is a string to show at the beginning of the mini-buffer, defaulting to \"Node: \""
+  (let* ((nodes (org-roam-node-read--completions filter-fn sort-fn))
+         (prompt (or prompt "Node: "))
          (node (completing-read
-                "Node: "
+                prompt
                 (lambda (string pred action)
                   (if (eq action 'metadata)
                       `(metadata
@@ -527,15 +538,31 @@ If REQUIRE-MATCH, the minibuffer prompt will require a match."
     (or (cdr (assoc node nodes))
         (org-roam-node-create :title node))))
 
-(defun org-roam-node-read--completions ()
+(defun org-roam-node-read--completions (&optional filter-fn sort-fn)
   "Return an alist for node completion.
 The car is the displayed title or alias for the node, and the cdr
 is the `org-roam-node'.
+FILTER-FN is a function to filter out nodes: it takes an `org-roam-node',
+and when nil is returned the node will be filtered out.
+SORT-FN is a function to sort nodes. See `org-roam-node-read-sort-by-file-mtime'
+for an example sort function.
 The displayed title is formatted according to `org-roam-node-display-template'."
-  (let ((template (org-roam-node--process-display-format org-roam-node-display-template))
-        (nodes (org-roam-node-list)))
-    (mapcar (lambda (node)
-              (org-roam-node-read--to-candidate node template)) nodes)))
+  (let* ((template (org-roam-node--process-display-format org-roam-node-display-template))
+         (nodes (org-roam-node-list))
+         (nodes (mapcar (lambda (node)
+                          (org-roam-node-read--to-candidate node template)) nodes))
+         (nodes (if filter-fn
+                    (cl-remove-if-not
+                     (lambda (n) (funcall filter-fn (cdr n)))
+                     nodes)
+                  nodes))
+         (sort-fn (or sort-fn
+                      (when org-roam-node-default-sort
+                        (intern (concat "org-roam-node-read-sort-by-"
+                                        (symbol-name org-roam-node-default-sort))))))
+         (nodes (if sort-fn (seq-sort sort-fn nodes)
+                  nodes)))
+    nodes))
 
 (defun org-roam-node-read--to-candidate (node template)
   "Return a minibuffer completion candidate given NODE.
@@ -543,7 +570,8 @@ TEMPLATE is the processed template used to format the entry."
   (let ((candidate-main (org-roam-node--format-entry
                          template
                          node
-                         (1- (frame-width)))))
+                         (1- (if (bufferp (current-buffer))
+                                 (window-width) (frame-width))))))
     (cons (propertize candidate-main 'node node) node)))
 
 (defun org-roam-node--format-entry (template node &optional width)
@@ -675,26 +703,6 @@ The INFO, if provided, is passed to the underlying `org-roam-capture-'."
                            :link-description description
                            :finalize 'insert-link))))))
     (deactivate-mark)))
-
-(add-hook 'org-roam-find-file-hook #'org-roam-open-id-with-org-roam-db-h)
-(defun org-roam-open-id-with-org-roam-db-h ()
-  "Try to open \"id:\" links at point by querying them to the database."
-  (add-hook 'org-open-at-point-functions #'org-roam-open-id-at-point nil t))
-
-(defun org-roam-open-id-at-point ()
-  "Navigate to \"id:\" link at point using the Org-roam database."
-  (when (org-in-regexp org-link-any-re)
-    (let ((link (match-string 2))
-          id)
-      (when (string-prefix-p "id:" link)
-        (setq id (substring-no-properties link 3))
-        (let ((node (org-roam-populate (org-roam-node-create :id id))))
-          (cond
-           ((org-roam-node-file node)
-            (org-mark-ring-push)
-            (org-roam-node-visit node nil 'force)
-            t)
-           (t nil)))))))
 
 ;;;;; [roam:] link
 (org-link-set-parameters "roam" :follow #'org-roam-link-follow-link)
@@ -929,42 +937,6 @@ If region is active, then use it instead of the node at point."
         (org-roam-promote-entire-buffer)
         (save-buffer)))))
 
-;;; IDs
-;;;; Getters
-(defun org-roam-id-at-point ()
-  "Return the ID at point, if any.
-Recursively traverses up the headline tree to find the
-first encapsulating ID."
-  (org-with-wide-buffer
-   (org-back-to-heading-or-point-min t)
-   (while (and (not (org-roam-db-node-p))
-               (not (bobp)))
-     (org-roam-up-heading-or-point-min))
-   (when (org-roam-db-node-p)
-     (org-id-get))))
-
-;;;###autoload
-(defun org-roam-update-org-id-locations (&rest directories)
-  "Scan Org-roam files to update `org-id' related state.
-This is like `org-id-update-id-locations', but will automatically
-use the currently bound `org-directory' and `org-roam-directory'
-along with DIRECTORIES (if any), where the lookup for files in
-these directories will be always recursive.
-
-Note: Org-roam doesn't have hard dependency on
-`org-id-locations-file' to lookup IDs for nodes that are stored
-in the database, but it still tries to properly integrates with
-`org-id'. This allows the user to cross-reference IDs outside of
-the current `org-roam-directory', and also link with \"id:\"
-links to headings/files within the current `org-roam-directory'
-that are excluded from identification in Org-roam as
-`org-roam-node's, e.g. with \"ROAM_EXCLUDE\" property."
-  (interactive)
-  (cl-loop for dir in (cons org-roam-directory directories)
-           for org-roam-directory = dir
-           nconc (org-roam-list-files) into files
-           finally (org-id-update-id-locations files org-roam-verbose)))
-
 ;;; Refs
 ;;;; Completing-read interface
 (defun org-roam-ref-read (&optional initial-input filter-fn)
@@ -1086,7 +1058,7 @@ and when nil is returned the node will be filtered out."
                                   (org-make-tag-string (seq-difference current-tags tags #'string-equal))))
         (let* ((current-tags (or (org-get-tags)
                                  (user-error "No tag to remove")))
-               (tags (completing-read-multiple "Tag: " current-tags)))
+               (tags (or tags (completing-read-multiple "Tag: " current-tags))))
           (org-set-tags (seq-difference current-tags tags #'string-equal))))
       tags)))
 

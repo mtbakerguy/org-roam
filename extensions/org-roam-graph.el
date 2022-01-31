@@ -5,7 +5,7 @@
 ;; Author: Jethro Kuan <jethrokuan95@gmail.com>
 ;; URL: https://github.com/org-roam/org-roam
 ;; Keywords: org-mode, roam, convenience
-;; Version: 2.1.0
+;; Version: 2.2.0
 ;; Package-Requires: ((emacs "26.1") (org "9.4") (org-roam "2.1"))
 
 ;; This file is NOT part of GNU Emacs.
@@ -266,7 +266,7 @@ Handles both Org-roam nodes, and string nodes (e.g. urls)."
                 (org-roam-quote-string
                  (pcase org-roam-graph-shorten-titles
                    (`truncate (truncate-string-to-width title org-roam-graph-max-title-length nil nil "..."))
-                   (`wrap (s-word-wrap org-roam-graph-max-title-length title))
+                   (`wrap (org-roam-word-wrap org-roam-graph-max-title-length title))
                    (_ title)))))
           (setq node-id (org-roam-node-id node)
                 node-properties `(("label"   . ,shortened-title)

@@ -1,8 +1,35 @@
 # Changelog
-
 ## TBD
+### Breaking
+- [#2054](https://github.com/org-roam/org-roam/pull/2054) node: simplify default `org-roam-node-display-template`.
+  This was done so completions work fine by default on all completion systems. To restore the tabular vertical completion interface, set this in your configuration:
+  
+  ```emacs-lisp
+  (setq org-roam-node-display-template
+        (concat "${title:*} "
+                (propertize "${tags:10}" 'face 'org-tag)))
+  ```
+
 ### Added
-- [#1806](https://github.com/org-roam/org-roam/pull/1806) db: support caching and usage of Org 9.5's in-built citations
+- [#2042](https://github.com/org-roam/org-roam/pull/2042) db: add `org-roam-db-extra-links-elements` and `org-roam-db-extra-links-exclude-keys` for fine-grained control over additional link parsing
+- [#2049](https://github.com/org-roam/org-roam/pull/2049) capture: allow ID to be used as part of `org-roam-capture-templates`
+- [#2050](https://github.com/org-roam/org-roam/pull/2050) core: add `FILTER-FN` to `org-roam-node-random`
+- [#2065](https://github.com/org-roam/org-roam/pull/2065) dailies: add `keys` argument to the remaining dailies functions `org-roam-dailies-goto-yesterday`/`-today`/`-tomorrow`/`-date` and `org-roam-dailies-capture-yesterday`/`-tomorrow`/`-date` to give the abilty to get into a capture buffer bypassing the selection screen in all dailies commands. Extension of #2055
+### Removed
+### Fixed
+- [#2055](https://github.com/org-roam/org-roam/pull/2055) dailies: removed stray f require, which was causing require and compilation errors
+### Changed
+- [#2060](https://github.com/org-roam/org-roam/pull/2060) node: added double acute accent normalization for Unicode characters in titles
+- [#2040](https://github.com/org-roam/org-roam/pull/2040) completions: fix completions display-width for Helm users
+- [#2025](https://github.com/org-roam/org-roam/pull/2025) chore: removed the dependencies on f.el and s.el
+
+## 2.2.0
+### Added
+- [#1806](https://github.com/org-roam/org-roam/pull/1806), [#2017](https://github.com/org-roam/org-roam/pull/2017) db: support caching and usage of Org 9.5's in-built citations
+- [#1963](https://github.com/org-roam/org-roam/pull/1963) db: cache file title into files table
+- [#1977](https://github.com/org-roam/org-roam/pull/1977) db: support Org-ref v3 citations
+- [#1907](https://github.com/org-roam/org-roam/pull/1907), [#2009](https://github.com/org-roam/org-roam/pull/2009), [#2018](https://github.com/org-roam/org-roam/pull/2018) db: support sqlite3
+- [#2028](https://github.com/org-roam/org-roam/pull/2028) dailies: add `keys` argument to `org-roam-dailies-capture-today` and `org-roam-dailies--capture` functions to give the abilty to get into a capture buffer bypassing the selection screen
 
 ### Removed
 ### Changed
@@ -10,12 +37,22 @@
 - [#1809](https://github.com/org-roam/org-roam/pull/1809) capture: the mandatory `:if-new` property of each capture template is now renamed to `:target`
 - [#1829](https://github.com/org-roam/org-roam/pull/1829) perf: file sql updates are now wrapped in a transaction
 - [#1877](https://github.com/org-roam/org-roam/pull/1877) dailies: stop asking for time, only date
+- [#1949](https://github.com/org-roam/org-roam/pull/1949) db: check for property drawers are now case-insensitive
 
 ### Fixed
 - [#1798](https://github.com/org-roam/org-roam/pull/1798) org-roam-node-at-point: do not skip invisible headings
 - [#1807](https://github.com/org-roam/org-roam/pull/1807) capture: always trigger `:if-new` template for existing nodes
 - [#1813](https://github.com/org-roam/org-roam/pull/1813) db: prevent empty ROAM_ALIASES from crashing db updates
 - [#1816](https://github.com/org-roam/org-roam/pull/1816) db: prevent invalid ROAM_REFS from crashing db updates
+- [#1893](https://github.com/org-roam/org-roam/pull/1893), [#1896](https://github.com/org-roam/org-roam/pull/1896), [#1901](https://github.com/org-roam/org-roam/pull/1901), [#1895](https://github.com/org-roam/org-roam/pull/1895), [#1904](https://github.com/org-roam/org-roam/pull/1904) completions: various mini-buffer related completion fixes
+- [#1931](https://github.com/org-roam/org-roam/pull/1931) utils: org-roam-set-keyword now skips over all drawers
+- [#1947](https://github.com/org-roam/org-roam/pull/1947) db: links in ROAM_REFS are no longer considered as links
+- [#1948](https://github.com/org-roam/org-roam/pull/1948) completions: fix same-line completions
+- [#1953](https://github.com/org-roam/org-roam/pull/1953) db: refresh CATEGORY before writing to db
+- [#1946](https://github.com/org-roam/org-roam/pull/1946), [#1946](https://github.com/org-roam/org-roam/pull/1946), [#1958](https://github.com/org-roam/org-roam/pull/1958) various performance improvements
+- [#1980](https://github.com/org-roam/org-roam/pull/1980) utils: fix org-roam-with-file changing the minor-mode
+- [#2016](https://github.com/org-roam/org-roam/pull/2016) db: fix node caching being affected by agenda variables
+- [#2033](https://github.com/org-roam/org-roam/pull/2023) db: respect local variables during db parsing
 
 ## 2.1.0
 ### Added
