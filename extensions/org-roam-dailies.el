@@ -1,13 +1,13 @@
 ;;; org-roam-dailies.el --- Daily-notes for Org-roam -*- coding: utf-8; lexical-binding: t; -*-
 ;;;
-;; Copyright © 2020-2021 Jethro Kuan <jethrokuan95@gmail.com>
+;; Copyright © 2020-2022 Jethro Kuan <jethrokuan95@gmail.com>
 ;; Copyright © 2020 Leo Vivier <leo.vivier+dev@gmail.com>
 
 ;; Author: Jethro Kuan <jethrokuan95@gmail.com>
 ;;      Leo Vivier <leo.vivier+dev@gmail.com>
 ;; URL: https://github.com/org-roam/org-roam
 ;; Keywords: org-mode, roam, convenience
-;; Version: 2.2.0
+;; Version: 2.2.2
 ;; Package-Requires: ((emacs "26.1") (dash "2.13") (org-roam "2.1"))
 
 ;; This file is NOT part of GNU Emacs.
@@ -329,7 +329,8 @@ When GOTO is non-nil, go the note without creating an entry.
 
 ELisp programs can set KEYS to a string associated with a template.
 In this case, interactive selection will be bypassed."
-  (let ((org-roam-directory (expand-file-name org-roam-dailies-directory org-roam-directory)))
+  (let ((org-roam-directory (expand-file-name org-roam-dailies-directory org-roam-directory))
+        (org-roam-dailies-directory "./"))
     (org-roam-capture- :goto (when goto '(4))
                        :keys keys
                        :node (org-roam-node-create)
