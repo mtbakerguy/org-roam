@@ -112,6 +112,12 @@ It takes a single argument REF, which is a propertized string."
   :group 'org-roam
   :type  '(function))
 
+(defcustom org-roam-ref-prompt-function nil
+  "Function to prompt for ref strings in `org-roam-ref-add'.
+Should take no arguments, prompt the user, and return a string."
+  :group 'org-roam
+  :type 'function)
+
 ;;;; Completion-at-point
 (defcustom org-roam-completion-everywhere nil
   "When non-nil, provide link completion matching outside of Org links."
@@ -210,6 +216,10 @@ This path is relative to `org-roam-directory'."
     (_
      (org-roam-node-title node))))
 
+(cl-defmethod org-roam-node-category ((node org-roam-node))
+  "Return the category for NODE."
+  (cdr (assoc-string "CATEGORY" (org-roam-node-properties node))))
+
 ;;; Nodes
 ;;;; Getters
 (defun org-roam-node-at-point (&optional assert)
@@ -226,11 +236,10 @@ populated."
         (t (org-with-wide-buffer
             (while (not (or (org-roam-db-node-p)
                             (bobp)
-                            ;; Handle case where top-level is a heading
-                            (= (funcall outline-level)
-                               (save-excursion
-                                 (org-roam-up-heading-or-point-min)
-                                 (funcall outline-level)))))
+                            (eq (funcall outline-level)
+                                (save-excursion
+                                  (org-roam-up-heading-or-point-min)
+                                  (funcall outline-level)))))
               (org-roam-up-heading-or-point-min))
             (when-let ((id (org-id-get)))
               (org-roam-populate
@@ -770,7 +779,8 @@ We use this as a substitute for `org-link-bracket-re', because
   "Complete \"roam:\" link at point to an existing Org-roam node."
   (let (roam-p start end)
     (when (org-in-regexp org-roam-bracket-completion-re 1)
-      (setq roam-p (not (string-blank-p (match-string 1)))
+      (setq roam-p (not (or (org-in-src-block-p)
+                            (string-blank-p (match-string 1))))
             start (match-beginning 2)
             end (match-end 2))
       (list start end
@@ -792,6 +802,7 @@ outside of the bracket syntax for links (i.e. \"[[roam:|]]\"),
 hence \"everywhere\"."
   (when (and org-roam-completion-everywhere
              (thing-at-point 'word)
+             (not (org-in-src-block-p))
              (not (save-match-data (org-in-regexp org-link-any-re))))
     (let ((bounds (bounds-of-thing-at-point 'word)))
       (list (car bounds) (cdr bounds)
@@ -864,7 +875,7 @@ node."
     (let ((title (nth 4 (org-heading-components)))
           (tags (org-get-tags)))
       (kill-whole-line)
-      (org-roam-end-of-meta-data)
+      (org-roam-end-of-meta-data t)
       (insert "#+title: " title "\n")
       (when tags (org-roam-tag-add tags))
       (org-map-region #'org-promote (point-min) (point-max))
@@ -922,7 +933,7 @@ If region is active, then use it instead of the node at point."
         (if (buffer-file-name)
             (delete-file (buffer-file-name)))
         (set-buffer-modified-p nil)
-        ;; In this was done during capture, abort the capture process.
+        ;; If this was done during capture, abort the capture process.
         (when (and org-capture-mode
                    (buffer-base-buffer (current-buffer)))
           (org-capture-kill))
@@ -1032,11 +1043,15 @@ and when nil is returned the node will be filtered out."
 ;;;; Editing
 (defun org-roam-ref-add (ref)
   "Add REF to the node at point."
-  (interactive "sRef: ")
+  (interactive `(,(if org-roam-ref-prompt-function
+                      (funcall org-roam-ref-prompt-function)
+                    (read-string "Ref: "))))
   (let ((node (org-roam-node-at-point 'assert)))
     (save-excursion
       (goto-char (org-roam-node-point node))
-      (org-roam-property-add "ROAM_REFS" ref))))
+      (org-roam-property-add "ROAM_REFS" (if (memq " " (string-to-list ref))
+                                             (concat "\"" ref "\"")
+                                           ref)))))
 
 (defun org-roam-ref-remove (&optional ref)
   "Remove a REF from the node at point."
@@ -1064,7 +1079,8 @@ and when nil is returned the node will be filtered out."
 (defun org-roam-tag-add (tags)
   "Add TAGS to the node at point."
   (interactive
-   (list (completing-read-multiple "Tag: " (org-roam-tag-completions))))
+   (list (let ((crm-separator "[ 	]*:[ 	]*"))
+           (completing-read-multiple "Tag: " (org-roam-tag-completions)))))
   (let ((node (org-roam-node-at-point 'assert)))
     (save-excursion
       (goto-char (org-roam-node-point node))

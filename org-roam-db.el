@@ -6,7 +6,7 @@
 ;; URL: https://github.com/org-roam/org-roam
 ;; Keywords: org-mode, roam, convenience
 ;; Version: 2.2.2
-;; Package-Requires: ((emacs "26.1") (dash "2.13") (org "9.4") (emacsql "3.0.0") (emacsql-sqlite "1.0.0") (magit-section "3.0.0"))
+;; Package-Requires: ((emacs "26.1") (dash "2.13") (org "9.4") (emacsql "20230228") (magit-section "3.0.0"))
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -31,10 +31,17 @@
 ;;
 ;;; Code:
 (require 'org-roam)
+(require 'url-parse)
+(require 'ol)
 (defvar org-outline-path-cache)
 
 ;;; Options
-(defcustom org-roam-database-connector 'sqlite
+(defcustom org-roam-database-connector (if (and (progn
+                                                  (require 'emacsql-sqlite-builtin nil t)
+                                                  (functionp 'emacsql-sqlite-builtin))
+                                                (functionp 'sqlite-open))
+                                           'sqlite-builtin
+                                         'sqlite)
   "The database connector used by Org-roam.
 This must be set before `org-roam' is loaded.  To use an alternative
 connector you must install the respective package explicitly.
@@ -344,7 +351,7 @@ If FILE is nil, clear the current buffer."
 If there is no title, return the file name relative to
 `org-roam-directory'."
   (org-link-display-format
-   (or (cadr (assoc "TITLE" (org-collect-keywords '("title"))))
+   (or (string-join (cdr (assoc "TITLE" (org-collect-keywords '("title")))) " ")
        (file-name-sans-extension (file-relative-name
                                   (buffer-file-name (buffer-base-buffer))
                                   org-roam-directory)))))
@@ -397,7 +404,8 @@ If HASH is non-nil, use that as the file's hash without recalculating it."
       ;; `re-search-forward' let the cursor one character after the link, we need to go backward one char to
       ;; make the point be on the link.
       (backward-char)
-      (let* ((element (org-element-context))
+      (let* ((begin (match-beginning 0))
+             (element (org-element-context))
              (type (org-element-type element))
              link bounds)
         (cond
@@ -410,14 +418,9 @@ If HASH is non-nil, use that as the file's hash without recalculating it."
          ((and (member type org-roam-db-extra-links-elements)
                (not (member-ignore-case (org-element-property :key element)
                                         (cdr (assoc type org-roam-db-extra-links-exclude-keys))))
-               (setq bounds (org-in-regexp org-link-any-re))
-               (setq link (buffer-substring-no-properties
-                           (car bounds)
-                           (cdr bounds))))
-          (with-temp-buffer
-            (delay-mode-hooks (org-mode))
-            (insert link)
-            (setq link (org-element-context)))))
+               (setq link (save-excursion
+                            (goto-char begin)
+                            (save-match-data (org-element-link-parser)))))))
         (when link
           (dolist (fn fns)
             (funcall fn link)))))))
@@ -541,9 +544,14 @@ INFO is the org-element parsed buffer."
                 (;; https://google.com, cite:citeKey
                  ;; Note: we use string-match here because it matches any link: e.g. [[cite:abc][abc]]
                  ;; But this form of matching is loose, and can accept invalid links e.g. [[cite:abc]
-                 (string-match org-link-plain-re ref)
-                 (let ((link-type (match-string 1 ref))
-                       (path (match-string 2 ref)))
+                 (string-match org-link-any-re (org-link-encode ref '(#x20)))
+                 (setq ref (org-link-encode ref '(#x20)))
+                 (let ((ref-url (url-generic-parse-url (or (match-string 2 ref) (match-string 0 ref))))
+                       (link-type ()) ;; clear url-type for backward compatible.
+                       (path ()))
+                   (setq link-type (url-type ref-url))
+                   (setf (url-type ref-url) nil)
+                   (setq path (org-link-decode (url-recreate-url ref-url)))
                    (if (and (boundp 'org-ref-cite-types)
                             (or (assoc link-type org-ref-cite-types)
                                 (member link-type org-ref-cite-types)))
